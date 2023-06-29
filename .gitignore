@@ -1,1 +1,4 @@
-/.vs
+*/.vs
+*/obj
+EuroCertClient/appsettings.*.json
+EuroCertClient/EuroCertClient.csproj.user
