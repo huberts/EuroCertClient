@@ -4,6 +4,10 @@ using iText.Signatures;
 using Org.BouncyCastle.X509;
 using iText.Bouncycastle.X509;
 using iText.Kernel.Geom;
+using iText.Kernel.Pdf.Canvas;
+using iText.Kernel.Colors;
+using iText.Layout.Element;
+using iText.Layout;
 
 namespace EuroCertClient.Application.EuroCertSigner.Sign
 {
@@ -20,22 +24,12 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
 
     public Task Handle(SignRequest request)
     {
+      using var destinationFileStream = new FileStream(request.DestinationFilePath, FileMode.Create);
       var signer = new PdfSigner(
         new PdfReader(request.SourceFilePath),
-        new FileStream(request.DestinationFilePath, FileMode.Create),
+        destinationFileStream,
         new StampingProperties());
-      if (request.Apperance is not null)
-      {
-        signer.GetSignatureAppearance()
-          .SetPageNumber(request.Apperance.PageNumber)
-          .SetPageRect(new Rectangle(
-            request.Apperance.Rectangle.ElementAt(0),
-            request.Apperance.Rectangle.ElementAt(1),
-            request.Apperance.Rectangle.ElementAt(2),
-            request.Apperance.Rectangle.ElementAt(3)))
-          .SetReason(request.Apperance.Reason)
-          .SetLocation(request.Apperance.Location);
-      }
+      PrepareAppearance(signer.GetDocument(), signer.GetSignatureAppearance(), request.Appearance);
       signer.SetFieldName(request.SignatureFieldName);
       signer.SignDetached(EuroCertSignature, Chain, null, null, null, 0, PdfSigner.CryptoStandard.CADES);
       return Task.CompletedTask;
@@ -43,15 +37,49 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
 
     private IX509Certificate[] Chain
     {
-      get => new IX509Certificate[1]
-        {
-          new X509CertificateBC(new X509CertificateParser().ReadCertificate(File.Open(CertificateFilePath, FileMode.Open)))
-        };
+      get
+      {
+        using var certificate = File.Open(CertificateFilePath, FileMode.Open);
+        return new IX509Certificate[1]
+          {
+            new X509CertificateBC(new X509CertificateParser().ReadCertificate(certificate))
+          };
+      }
     }
 
     private string CertificateFilePath
     {
       get => Configuration["EuroCert:CertificateFilePath"]?.ToString() ?? "";
+    }
+
+    private void PrepareAppearance(PdfDocument document, PdfSignatureAppearance appearance, Appearance request)
+    {
+      if (request is not null)
+      {
+        appearance
+          .SetPageNumber(request.PageNumber)
+          .SetPageRect(new Rectangle(
+            request.Rectangle.ElementAt(0),
+            request.Rectangle.ElementAt(1),
+            request.Rectangle.ElementAt(2),
+            request.Rectangle.ElementAt(3)))
+          .SetReason(request.Reason)
+          .SetLocation(request.Location);
+      }
+      var background = appearance.GetLayer0();
+      float x = background.GetBBox().ToRectangle().GetLeft();
+      float y = background.GetBBox().ToRectangle().GetBottom();
+      float width = background.GetBBox().ToRectangle().GetWidth();
+      float height = background.GetBBox().ToRectangle().GetHeight();
+      var canvas = new PdfCanvas(background, document);
+      canvas.SetFillColor(ColorConstants.YELLOW);
+      canvas.Rectangle(x, y, width, height);
+      canvas.Fill();
+
+      var content = appearance.GetLayer2();
+      var p = new Paragraph("=== Podpisano poprawnie ===");
+      p.SetFontColor(ColorConstants.BLUE);
+      new Canvas(content, document).Add(p);
     }
   }
 }

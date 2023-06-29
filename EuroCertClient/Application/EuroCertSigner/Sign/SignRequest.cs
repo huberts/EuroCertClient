@@ -6,8 +6,8 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
   {
     public string Base64EncodedSourceFilePath { get; set; } = string.Empty;
     public string Base64EncodedDestinationFilePath { get; set; } = string.Empty;
-    public string SignatureFieldName = "Signed by EuroCert";
-    public Apperance? Apperance { get; set; } = null;
+    public string SignatureFieldName { get; set; } = "Signed by EuroCert";
+    public Appearance? Appearance { get; set; } = null;
 
 
     public string SourceFilePath
@@ -20,7 +20,7 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
     }
   }
 
-  public class Apperance
+  public class Appearance
   {
     public int PageNumber { get; set; } = 0;
     public List<int> Rectangle { get; set; } = new List<int>() { 0, 0, 0, 0 };

@@ -31,7 +31,7 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       }), Encoding.UTF8, "application/json");
       content.Headers.Add("API-KEY", ApiKey);
 
-      var response = new HttpClient().PostAsync(Address, content).Result;
+      var response = new HttpClient().PostAsync($"{Address}/{TaskId}", content).Result;
 
       var result = JsonConvert.DeserializeObject<EuroCertResponse>(response.Content.ReadAsStringAsync().Result)!;
 
@@ -40,7 +40,7 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
 
     private string Address
     {
-      get => $"https://ecqss.eurocert.pl/api/rsa/sign/{TaskId}";
+      get => Configuration["EuroCert:Address"]?.ToString() ?? "";
     }
 
     private string TaskId {
@@ -50,10 +50,5 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
     private string ApiKey {
       get => Configuration["EuroCert:ApiKey"]?.ToString() ?? "";
     }
-  }
-
-  class EuroCertResponse
-  {
-    public string Signature { get; set; } = string.Empty;
   }
 }
