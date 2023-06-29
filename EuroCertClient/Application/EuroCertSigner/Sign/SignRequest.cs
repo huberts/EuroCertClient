@@ -1,4 +1,6 @@
-﻿namespace EuroCertClient.Application.EuroCertSigner.Sign
+﻿using System.Text;
+
+namespace EuroCertClient.Application.EuroCertSigner.Sign
 {
   public class SignRequest
   {
@@ -10,5 +12,16 @@
 
     public string Base64EncodedSourceFilePath { get; set; }
     public string Base64EncodedDestinationFilePath { get; set; }
+
+    public string SourceFilePath { get
+      {
+        return Encoding.UTF8.GetString(Convert.FromBase64String(Base64EncodedSourceFilePath));
+      }
+    }
+    public string DestinationFilePath { get
+      {
+        return Encoding.UTF8.GetString(Convert.FromBase64String(Base64EncodedDestinationFilePath));
+      }
+    }
   }
 }

@@ -1,8 +1,13 @@
+using EuroCertClient.Application.EuroCertSigner.Sign;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
 builder.Services.AddControllers();
+
+builder.Services.AddTransient<SignRequestHandler>();
+builder.Services.AddTransient<EuroCertSignature>();
 
 var app = builder.Build();
 
