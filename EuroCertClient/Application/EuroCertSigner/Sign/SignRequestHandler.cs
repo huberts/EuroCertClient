@@ -3,10 +3,7 @@ using iText.Kernel.Pdf;
 using iText.Signatures;
 using Org.BouncyCastle.X509;
 using iText.Bouncycastle.X509;
-using iText.Kernel.Exceptions;
-using Newtonsoft.Json;
-using System.Net;
-using System.Text;
+using iText.Kernel.Geom;
 
 namespace EuroCertClient.Application.EuroCertSigner.Sign
 {
@@ -27,16 +24,19 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
         new PdfReader(request.SourceFilePath),
         new FileStream(request.DestinationFilePath, FileMode.Create),
         new StampingProperties());
-
-      //signer.GetSignatureAppearance()
-      //  .SetReason("Reason of signing")
-      //  .SetLocation("Location of signing")
-      //  .SetPageRect(new Rectangle(36, 68, 200, 100))
-      //  .SetPageNumber(1);
-
-      signer.SetFieldName("Signature by EuroCert");
-
-
+      if (request.Apperance is not null)
+      {
+        signer.GetSignatureAppearance()
+          .SetPageNumber(request.Apperance.PageNumber)
+          .SetPageRect(new Rectangle(
+            request.Apperance.Rectangle.ElementAt(0),
+            request.Apperance.Rectangle.ElementAt(1),
+            request.Apperance.Rectangle.ElementAt(2),
+            request.Apperance.Rectangle.ElementAt(3)))
+          .SetReason(request.Apperance.Reason)
+          .SetLocation(request.Apperance.Location);
+      }
+      signer.SetFieldName(request.SignatureFieldName);
       signer.SignDetached(EuroCertSignature, Chain, null, null, null, 0, PdfSigner.CryptoStandard.CADES);
       return Task.CompletedTask;
     }
