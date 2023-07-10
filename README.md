@@ -6,17 +6,18 @@ Configuration is available through the *application.json* file.
 ```json
   "EuroCert": {
     "CertificateFilePath": "C:/certificate.crt",
-    "Address": "https://ecqss.eurocert.pl/api/rsa/sign",
-    "TaskId": "0",
-    "ApiKey": "API_KEY"
+    "Address": "https://ecqss.eurocert.pl/api/rsa/sign"
   },
 ```
+*TaskId* and *ApiKey* should be provided in the request message.
 
 # Usage
-There is only one route action *[POST]http://localhost:5097/EuroCertSigner* and it accepts JSON input:
+There is only one route action *[POST]http://localhost:5097/EuroCertSigner* and it accepts Form input:
 ```json
 {
-  "Base64EncodedSourceFilePath": "",
+  "EuroCertApiKey": "",
+  "EuroCertTaskId": "",
+  "SourceFile": <IFormFile>,
   "Base64EncodedDestinationFilePath": "",
   "SignatureFieldName": "Signed by EuroCert",
   "Appearance": {
@@ -27,12 +28,8 @@ There is only one route action *[POST]http://localhost:5097/EuroCertSigner* and 
   }
 }
 ```
-The response is even simplier:
-```json
-{
- "Signature": ""
-}
-```
+The response is the signed file stream.
+If EuroCert returns with error, *InternalServerError* is returned by this service.
 
 # License
 This software uses [IText Core Library](https://wiki.itextsupport.com/home/it7kb/releases/release-itext-core-8-0-0 "iText's Homepage"),
