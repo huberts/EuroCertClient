@@ -4,20 +4,11 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
 {
   public class SignRequest
   {
-    public string Base64EncodedSourceFilePath { get; set; } = string.Empty;
-    public string Base64EncodedDestinationFilePath { get; set; } = string.Empty;
-    public string SignatureFieldName { get; set; } = "Signed by EuroCert";
+    public string EuroCertApiKey { get; set; } = string.Empty;
+    public string EuroCertTaskId { get; set; } = string.Empty;
+    public IFormFile? SourceFile { get; set; } = null;
+    public string? SignatureFieldName { get; set; } = null;
     public Appearance? Appearance { get; set; } = null;
-
-
-    public string SourceFilePath
-    {
-      get => Encoding.UTF8.GetString(Convert.FromBase64String(Base64EncodedSourceFilePath));
-    }
-    public string DestinationFilePath
-    {
-      get => Encoding.UTF8.GetString(Convert.FromBase64String(Base64EncodedDestinationFilePath));
-    }
   }
 
   public class Appearance

@@ -1,4 +1,5 @@
 using EuroCertClient.Application.EuroCertSigner.Sign;
+using NLog.Web;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -7,7 +8,11 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 
 builder.Services.AddTransient<SignRequestHandler>();
-builder.Services.AddTransient<EuroCertSignature>();
+
+builder.Services.AddSwaggerGen();
+
+builder.Logging.ClearProviders();
+builder.Host.UseNLog();
 
 var app = builder.Build();
 
@@ -18,5 +23,11 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 
 app.MapControllers();
+
+if (app.Environment.IsDevelopment())
+{
+  app.UseSwagger();
+  app.UseSwaggerUI();
+}
 
 app.Run();

@@ -14,25 +14,28 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
   public class SignRequestHandler
   {
     private readonly IConfiguration Configuration;
-    private readonly EuroCertSignature EuroCertSignature;
 
-    public SignRequestHandler(IConfiguration configuration, EuroCertSignature euroCertSignature)
+    public SignRequestHandler(IConfiguration configuration)
     {
       Configuration = configuration;
-      EuroCertSignature = euroCertSignature;
     }
 
-    public Task Handle(SignRequest request)
+    public Task<string> Handle(SignRequest request)
     {
-      using var destinationFileStream = new FileStream(request.DestinationFilePath, FileMode.Create);
+      if (request.SourceFile is null)
+      {
+        throw new ArgumentNullException("SourceFile not found!");
+      }
+      var temporaryFileName = System.IO.Path.GetTempFileName();
+      using var destinationFileStream = new FileStream(temporaryFileName, FileMode.Create);
       var signer = new PdfSigner(
-        new PdfReader(request.SourceFilePath),
+        new PdfReader(request.SourceFile.OpenReadStream()),
         destinationFileStream,
         new StampingProperties());
       PrepareAppearance(signer.GetDocument(), signer.GetSignatureAppearance(), request.Appearance);
       signer.SetFieldName(request.SignatureFieldName);
-      signer.SignDetached(EuroCertSignature, Chain, null, null, null, 0, PdfSigner.CryptoStandard.CADES);
-      return Task.CompletedTask;
+      signer.SignDetached(new EuroCertSignature(EuroCertAddress, request.EuroCertApiKey, request.EuroCertTaskId), Chain, null, null, null, 0, PdfSigner.CryptoStandard.CADES);
+      return Task.FromResult(temporaryFileName);
     }
 
     private IX509Certificate[] Chain
@@ -52,7 +55,7 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       get => Configuration["EuroCert:CertificateFilePath"]?.ToString() ?? "";
     }
 
-    private void PrepareAppearance(PdfDocument document, PdfSignatureAppearance appearance, Appearance request)
+    private void PrepareAppearance(PdfDocument document, PdfSignatureAppearance appearance, Appearance? request)
     {
       if (request is not null)
       {
@@ -80,6 +83,11 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       var p = new Paragraph("=== Podpisano poprawnie ===");
       p.SetFontColor(ColorConstants.BLUE);
       new Canvas(content, document).Add(p);
+    }
+
+    private string EuroCertAddress
+    {
+      get => Configuration["EuroCert:Address"]?.ToString() ?? "";
     }
   }
 }
