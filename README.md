@@ -18,7 +18,6 @@ There is only one route action *[POST]http://localhost:5097/EuroCertSigner* and 
   "EuroCertApiKey": "",
   "EuroCertTaskId": "",
   "SourceFile": <IFormFile>,
-  "Base64EncodedDestinationFilePath": "",
   "SignatureFieldName": "Signed by EuroCert",
   "Appearance": {
     "PageNumber": 0,
