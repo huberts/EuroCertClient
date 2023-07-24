@@ -8,6 +8,10 @@ using iText.Kernel.Pdf.Canvas;
 using iText.Kernel.Colors;
 using iText.Layout.Element;
 using iText.Layout;
+using iText.IO.Font.Constants;
+using iText.Kernel.Font;
+using Newtonsoft.Json;
+using iText.IO.Image;
 
 namespace EuroCertClient.Application.EuroCertSigner.Sign
 {
@@ -26,15 +30,19 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       {
         throw new ArgumentNullException("SourceFile not found!");
       }
+
+      SignData signData = JsonConvert.DeserializeObject<SignData>(request.SignData);
       var temporaryFileName = System.IO.Path.GetTempFileName();
       using var destinationFileStream = new FileStream(temporaryFileName, FileMode.Create);
       var signer = new PdfSigner(
         new PdfReader(request.SourceFile.OpenReadStream()),
         destinationFileStream,
         new StampingProperties());
-      PrepareAppearance(signer.GetDocument(), signer.GetSignatureAppearance(), request.Appearance);
-      signer.SetFieldName(request.SignatureFieldName);
-      signer.SignDetached(new EuroCertSignature(EuroCertAddress, request.EuroCertApiKey, request.EuroCertTaskId), Chain, null, null, null, 0, PdfSigner.CryptoStandard.CADES);
+      PrepareAppearance(signer.GetDocument(), signer.GetSignatureAppearance(), signData.Appearance, Chain[0]);
+      signer.SetFieldName(signData.SignatureFieldName);
+      signer.SignDetached(
+        new EuroCertSignature(EuroCertAddress, signData.EuroCertApiKey, signData.EuroCertTaskId),
+        Chain, null, null, null, 0, PdfSigner.CryptoStandard.CADES);
       return Task.FromResult(temporaryFileName);
     }
 
@@ -54,40 +62,107 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
     {
       get => Configuration["EuroCert:CertificateFilePath"]?.ToString() ?? "";
     }
-
-    private void PrepareAppearance(PdfDocument document, PdfSignatureAppearance appearance, Appearance? request)
-    {
-      if (request is not null)
-      {
-        appearance
-          .SetPageNumber(request.PageNumber)
-          .SetPageRect(new Rectangle(
-            request.Rectangle.ElementAt(0),
-            request.Rectangle.ElementAt(1),
-            request.Rectangle.ElementAt(2),
-            request.Rectangle.ElementAt(3)))
-          .SetReason(request.Reason)
-          .SetLocation(request.Location);
-      }
-      var background = appearance.GetLayer0();
-      float x = background.GetBBox().ToRectangle().GetLeft();
-      float y = background.GetBBox().ToRectangle().GetBottom();
-      float width = background.GetBBox().ToRectangle().GetWidth();
-      float height = background.GetBBox().ToRectangle().GetHeight();
-      var canvas = new PdfCanvas(background, document);
-      canvas.SetFillColor(ColorConstants.YELLOW);
-      canvas.Rectangle(x, y, width, height);
-      canvas.Fill();
-
-      var content = appearance.GetLayer2();
-      var p = new Paragraph("=== Podpisano poprawnie ===");
-      p.SetFontColor(ColorConstants.BLUE);
-      new Canvas(content, document).Add(p);
-    }
-
     private string EuroCertAddress
     {
       get => Configuration["EuroCert:Address"]?.ToString() ?? "";
+    }
+    private string LogoFilePath
+    {
+      get => Configuration["EuroCert:Logo"]?.ToString() ?? "";
+    }
+
+    private void PrepareAppearance(PdfDocument document, PdfSignatureAppearance appearance,
+      Appearance? request, IX509Certificate iX509Certificate)
+    {
+      if (request is null)
+        return;
+
+      //ImageData logoImg = ImageDataFactory.Create(LogoFilePath);
+      Rectangle BBox = new(
+          request.X,
+          request.Y,
+          request.Width,
+          request.Height);
+
+      appearance
+        .SetPageNumber(request.PageNumber)
+        .SetPageRect(BBox);
+
+      //string certCN = CertificateInfo.GetSubjectFields(iX509Certificate).GetField("CN");
+      string certCN = "PREZYDENT MIASTA KRAKOWA";
+      string date = $"Data: {DateTime.Now:yyyy-MM-dd HH:mm}";
+      string footer = "(pieczęć elektroniczna)";
+
+      PaintAppearanceOnCanvas(new PdfCanvas(appearance.GetLayer2(), document), BBox, certCN, date, footer);
+
+    }
+
+    private void PaintAppearanceOnCanvas(PdfCanvas canvas, Rectangle rect, string name, string date, string footer)
+    {
+      var regular = PdfFontFactory.CreateFont(StandardFonts.HELVETICA, iText.IO.Font.PdfEncodings.CP1250);
+      var bold = PdfFontFactory.CreateFont(StandardFonts.HELVETICA_BOLD, iText.IO.Font.PdfEncodings.CP1250);
+
+      var size = CalculateFontSize();
+
+      var nameText = new Text(name)
+        .SetFont(bold)
+        .SetFontColor(ColorConstants.BLUE)
+        .SetFontSize(size);
+
+      var dateText = new Text(date)
+        .SetFont(regular)
+        .SetFontSize(size);
+
+      var footerText = new Text(footer)
+        .SetFont(regular)
+        .SetFontSize(size);
+
+      new Canvas(canvas, new Rectangle(1, 1, rect.GetWidth() / 3 - 2, rect.GetHeight() - 2))
+        .Add(new Image(ImageDataFactory.Create(LogoFilePath)).SetAutoScale(true))
+        .Close();
+
+      PaintTextCanvas(
+        canvas,
+        new Rectangle(rect.GetWidth() / 3, rect.GetHeight() / 2, rect.GetWidth() * 2 / 3, rect.GetHeight() / 2),
+        name,
+        bold,
+        ColorConstants.BLUE,
+        size);
+
+      PaintTextCanvas(
+        canvas,
+        new Rectangle(rect.GetWidth() / 3, rect.GetHeight() * 3 / 8, rect.GetWidth() * 2 / 3, rect.GetHeight() / 4),
+        date,
+        regular,
+        ColorConstants.BLACK,
+        size);
+
+      PaintTextCanvas(
+        canvas,
+        new Rectangle(rect.GetWidth() / 3, rect.GetHeight() / 8, rect.GetWidth() * 2 / 3, rect.GetHeight() / 4),
+        footer,
+        regular,
+        ColorConstants.BLACK,
+        size);
+    }
+
+    private void PaintTextCanvas(PdfCanvas canvas, Rectangle rect, string text, PdfFont font, Color color, float size)
+    {
+      new Canvas(canvas, rect).Add(
+        new Paragraph(new Text(text)
+        .SetFont(font)
+        .SetFontColor(color)
+        .SetFontSize(size)
+        )
+        .SetTextAlignment(iText.Layout.Properties.TextAlignment.CENTER)
+        .SetHorizontalAlignment(iText.Layout.Properties.HorizontalAlignment.CENTER)
+        .SetVerticalAlignment(iText.Layout.Properties.VerticalAlignment.MIDDLE)
+        ).Close();
+    }
+
+    private float CalculateFontSize()
+    {
+      return 4;
     }
   }
 }
