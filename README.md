@@ -15,15 +15,17 @@ Configuration is available through the *application.json* file.
 There is only one route action *[POST]http://localhost:5097/EuroCertSigner* and it accepts Form input:
 ```json
 {
-  "EuroCertApiKey": "",
-  "EuroCertTaskId": "",
-  "SourceFile": <IFormFile>,
-  "SignatureFieldName": "Signed by EuroCert",
-  "Appearance": {
-    "PageNumber": 0,
-    "Rectangle": [0, 0, 0, 0],
-    "Reason": "",
-    "Location": ""
+"EuroCertApiKey":"****",
+"EuroCertTaskId":"*",
+"SignatureFieldName":"test_signature",
+"Appearance":{
+  "PageNumber":1,
+  "X":53.25,
+  "Y":104.0,
+  "Width":125.0,
+  "Height":25.0,
+  "Reason":"",
+  "Location":""
   }
 }
 ```
