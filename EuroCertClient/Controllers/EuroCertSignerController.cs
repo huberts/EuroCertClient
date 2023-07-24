@@ -38,10 +38,10 @@ namespace EuroCertClient.Controllers
         _logger.LogError($"EuroCertException: not signed: {request.SourceFile?.FileName} -> {e.Code}: {e.Message}");
         return StatusCode(StatusCodes.Status500InternalServerError, $"EuroCert error: {e.Code}");
       }
-      catch (Exception e2)
+      catch (Exception e)
       {
-        _logger.LogError($"EuroCertException: not signed: {request.SourceFile?.FileName} -> {e2.Message}");
-        return StatusCode(StatusCodes.Status500InternalServerError, $"EuroCert error: {e2.Message}");
+        _logger.LogError($"EuroCertException: not signed: {request.SourceFile?.FileName} -> {e.Message}");
+        return StatusCode(StatusCodes.Status500InternalServerError, $"EuroCert error: {e.Message}");
       }
     }
   }
