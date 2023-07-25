@@ -14,6 +14,7 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
     public string EuroCertTaskId { get; set; } = string.Empty;
     public string? SignatureFieldName { get; set; } = null;
     public Appearance? Appearance { get; set; } = null;
+    public string ServiceApiKey { get; set; } = string.Empty;
   }
 
   public class Appearance

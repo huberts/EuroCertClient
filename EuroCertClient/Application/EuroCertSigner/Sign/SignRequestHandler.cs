@@ -31,7 +31,13 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
         throw new ArgumentNullException("SourceFile not found!");
       }
 
-      SignData signData = JsonConvert.DeserializeObject<SignData>(request.SignData);
+      SignData? signData = JsonConvert.DeserializeObject<SignData>(request.SignData);
+      if (string.IsNullOrEmpty(ServiceApiKey) 
+        || string.IsNullOrEmpty(signData?.ServiceApiKey) 
+        || !signData.ServiceApiKey.Equals(ServiceApiKey))
+      {
+        throw new ArgumentException("ServiceApiKey invalid.");
+      }
       var temporaryFileName = System.IO.Path.GetTempFileName();
       using var destinationFileStream = new FileStream(temporaryFileName, FileMode.Create);
       var signer = new PdfSigner(
@@ -69,6 +75,10 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
     private string LogoFilePath
     {
       get => Configuration["EuroCert:Logo"]?.ToString() ?? "";
+    }
+    private string ServiceApiKey
+    {
+      get => Configuration["Eurocert:WebServiceApiKey"]?.ToString() ?? "";
     }
 
     private void PrepareAppearance(PdfDocument document, PdfSignatureAppearance appearance,
