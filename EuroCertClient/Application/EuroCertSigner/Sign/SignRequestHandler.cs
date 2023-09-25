@@ -38,6 +38,7 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       {
         throw new ArgumentException("ServiceApiKey invalid.");
       }
+
       var temporaryFileName = System.IO.Path.GetTempFileName();
       using var destinationFileStream = new FileStream(temporaryFileName, FileMode.Create);
       var signer = new PdfSigner(
@@ -47,7 +48,7 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       PrepareAppearance(signer.GetDocument(), signer.GetSignatureAppearance(), signData.Appearance, Chain[0]);
       signer.SetFieldName(signData.SignatureFieldName);
       signer.SignDetached(
-        new EuroCertSignature(EuroCertAddress, signData.EuroCertApiKey, signData.EuroCertTaskId),
+        new EuroCertSignature(EuroCertAddress, signData.ec_ApiKey, signData.EuroCertTaskId),
         Chain, null, null, null, 0, PdfSigner.CryptoStandard.CADES);
       return Task.FromResult(temporaryFileName);
     }
