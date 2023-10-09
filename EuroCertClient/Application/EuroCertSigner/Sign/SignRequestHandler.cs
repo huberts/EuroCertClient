@@ -44,7 +44,7 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       var signer = new PdfSigner(
         new PdfReader(request.SourceFile.OpenReadStream()),
         destinationFileStream,
-        new StampingProperties());
+        new StampingProperties().UseAppendMode());
       PrepareAppearance(signer.GetDocument(), signer.GetSignatureAppearance(), signData.Appearance, Chain[0]);
       signer.SetFieldName(signData.SignatureFieldName);
       signer.SignDetached(
