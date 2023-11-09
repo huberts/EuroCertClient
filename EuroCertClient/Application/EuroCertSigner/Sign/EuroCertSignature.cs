@@ -1,8 +1,8 @@
-﻿using iText.Kernel.Exceptions;
-using iText.Signatures;
+﻿using iTextSharp.text.pdf.security;
 using Newtonsoft.Json;
 using System.IO;
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace EuroCertClient.Application.EuroCertSigner.Sign
@@ -20,11 +20,9 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       _taskId = taskId;
     }
 
-    public string GetDigestAlgorithmName() => DigestAlgorithms.SHA256;
+    public string GetEncryptionAlgorithm() => "RSA";
 
-    public string GetSignatureAlgorithmName() => "RSA";
-
-    public ISignatureMechanismParams? GetSignatureMechanismParameters() => null;
+    public string GetHashAlgorithm() => DigestAlgorithms.SHA256;
 
     public byte[] Sign(byte[] message)
     {

@@ -1,17 +1,9 @@
-﻿using iText.Commons.Bouncycastle.Cert;
-using iText.Kernel.Pdf;
-using iText.Signatures;
-using Org.BouncyCastle.X509;
-using iText.Bouncycastle.X509;
-using iText.Kernel.Geom;
-using iText.Kernel.Pdf.Canvas;
-using iText.Kernel.Colors;
-using iText.Layout.Element;
-using iText.Layout;
-using iText.IO.Font.Constants;
-using iText.Kernel.Font;
+﻿using iTextSharp.text;
+using iTextSharp.text.pdf;
+using iTextSharp.text.pdf.security;
 using Newtonsoft.Json;
-using iText.IO.Image;
+using Org.BouncyCastle.X509;
+using static iTextSharp.text.Font;
 
 namespace EuroCertClient.Application.EuroCertSigner.Sign
 {
@@ -40,27 +32,30 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       }
 
       var temporaryFileName = System.IO.Path.GetTempFileName();
+
+
+
       using var destinationFileStream = new FileStream(temporaryFileName, FileMode.Create);
-      var signer = new PdfSigner(
+      var stamper = PdfStamper.CreateSignature(
         new PdfReader(request.SourceFile.OpenReadStream()),
         destinationFileStream,
-        new StampingProperties().UseAppendMode());
-      PrepareAppearance(signer.GetDocument(), signer.GetSignatureAppearance(), signData.Appearance, Chain[0]);
-      signer.SetFieldName(signData.SignatureFieldName);
-      signer.SignDetached(
+        '\0', null, true);
+      PrepareAppearance(/*stamper.GetDocument(),*/ stamper.SignatureAppearance, signData.Appearance, signData.SignatureFieldName, Chain[0]);
+      MakeSignature.SignDetached(
+        stamper.SignatureAppearance,
         new EuroCertSignature(EuroCertAddress, signData.EuroCertApiKey, signData.EuroCertTaskId),
-        Chain, null, null, null, 0, PdfSigner.CryptoStandard.CADES);
+        Chain, null, null, null, 0, CryptoStandard.CADES);
       return Task.FromResult(temporaryFileName);
     }
 
-    private IX509Certificate[] Chain
+    private X509Certificate[] Chain
     {
       get
       {
         using var certificate = File.Open(CertificateFilePath, FileMode.Open);
-        return new IX509Certificate[1]
+        return new X509Certificate[]
           {
-            new X509CertificateBC(new X509CertificateParser().ReadCertificate(certificate))
+            new X509CertificateParser().ReadCertificate(certificate)
           };
       }
     }
@@ -82,42 +77,38 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       get => Configuration["Eurocert:WebServiceApiKey"]?.ToString() ?? "";
     }
 
-    private void PrepareAppearance(PdfDocument document, PdfSignatureAppearance appearance,
-      Appearance? request, IX509Certificate iX509Certificate)
+    private void PrepareAppearance(/*PdfDocument document,*/ PdfSignatureAppearance appearance,
+      Appearance? request, string fieldName, X509Certificate iX509Certificate)
     {
       if (request is null)
         return;
 
-      //ImageData logoImg = ImageDataFactory.Create(LogoFilePath);
       Rectangle BBox = new(
           request.X,
           request.Y,
           request.Width,
           request.Height);
 
-      appearance
-        .SetPageNumber(request.PageNumber)
-        .SetPageRect(BBox);
+      appearance.SetVisibleSignature(BBox, request.PageNumber, fieldName);
 
-      //string certCN = CertificateInfo.GetSubjectFields(iX509Certificate).GetField("CN");
       string certCN = "PREZYDENT MIASTA KRAKOWA";
       string date = $"Data: {DateTime.Now:yyyy-MM-dd HH:mm}";
       string footer = "(pieczęć elektroniczna)";
 
-      PaintAppearanceOnCanvas(new PdfCanvas(appearance.GetLayer2(), document), BBox, certCN, date, footer);
+      PaintAppearanceOnTemplate(appearance.GetLayer(2), BBox, certCN, date, footer);
 
     }
 
-    private void PaintAppearanceOnCanvas(PdfCanvas canvas, Rectangle rect, string name, string date, string footer)
+    private void PaintAppearanceOnTemplate(PdfTemplate template, Rectangle rect, string name, string date, string footer)
     {
-      var regular = PdfFontFactory.CreateFont(StandardFonts.HELVETICA, iText.IO.Font.PdfEncodings.CP1250);
-      var bold = PdfFontFactory.CreateFont(StandardFonts.HELVETICA_BOLD, iText.IO.Font.PdfEncodings.CP1250);
+      var regular = BaseFont.CreateFont(BaseFont.HELVETICA, "Cp1250", BaseFont.EMBEDDED);
+      var bold = BaseFont.CreateFont(BaseFont.HELVETICA_BOLD, "Cp1250", BaseFont.EMBEDDED);
 
       var size = CalculateFontSize();
 
       var nameText = new Text(name)
         .SetFont(bold)
-        .SetFontColor(ColorConstants.BLUE)
+        .SetFontColor(BaseColor.BLUE)
         .SetFontSize(size);
 
       var dateText = new Text(date)
@@ -128,36 +119,38 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
         .SetFont(regular)
         .SetFontSize(size);
 
-      new Canvas(canvas, new Rectangle(1, 1, rect.GetWidth() / 3 - 2, rect.GetHeight() - 2))
+
+
+      new Canvas(canvas, new Rectangle(1, 1, rect.Width / 3 - 2, rect.Height - 2))
         .Add(new Image(ImageDataFactory.Create(LogoFilePath)).SetAutoScale(true))
         .Close();
 
       PaintTextCanvas(
         canvas,
-        new Rectangle(rect.GetWidth() / 3, rect.GetHeight() / 2, rect.GetWidth() * 2 / 3, rect.GetHeight() / 2),
+        new Rectangle(rect.Width / 3, rect.Height / 2, rect.Width * 2 / 3, rect.Height / 2),
         name,
         bold,
-        ColorConstants.BLUE,
+        BaseColor.BLUE,
         size);
 
       PaintTextCanvas(
         canvas,
-        new Rectangle(rect.GetWidth() / 3, rect.GetHeight() * 3 / 8, rect.GetWidth() * 2 / 3, rect.GetHeight() / 4),
+        new Rectangle(rect.Width / 3, rect.Height * 3 / 8, rect.Width * 2 / 3, rect.Height / 4),
         date,
         regular,
-        ColorConstants.BLACK,
+        BaseColor.BLACK,
         size);
 
       PaintTextCanvas(
         canvas,
-        new Rectangle(rect.GetWidth() / 3, rect.GetHeight() / 8, rect.GetWidth() * 2 / 3, rect.GetHeight() / 4),
+        new Rectangle(rect.Width / 3, rect.Height / 8, rect.Width * 2 / 3, rect.Height / 4),
         footer,
         regular,
-        ColorConstants.BLACK,
+        BaseColor.BLACK,
         size);
     }
 
-    private void PaintTextCanvas(PdfCanvas canvas, Rectangle rect, string text, PdfFont font, Color color, float size)
+    private void PaintTextCanvas(PdfCanvas canvas, Rectangle rect, string text, PdfFont font, BaseColor color, float size)
     {
       new Canvas(canvas, rect).Add(
         new Paragraph(new Text(text)
@@ -165,9 +158,9 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
         .SetFontColor(color)
         .SetFontSize(size)
         )
-        .SetTextAlignment(iText.Layout.Properties.TextAlignment.CENTER)
-        .SetHorizontalAlignment(iText.Layout.Properties.HorizontalAlignment.CENTER)
-        .SetVerticalAlignment(iText.Layout.Properties.VerticalAlignment.MIDDLE)
+        .SetTextAlignment(Element.ALIGN_CENTER)
+        .SetHorizontalAlignment(Element.ALIGN_CENTER)
+        .SetVerticalAlignment(Element.ALIGN_MIDDLE)
         ).Close();
     }
 
