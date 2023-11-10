@@ -33,45 +33,43 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
         throw new ArgumentException("ServiceApiKey invalid.");
       }
 
-      var temporaryFileName = System.IO.Path.GetTempFileName();
-
-
-
+      var temporaryFileName = Path.GetTempFileName();
       using var destinationFileStream = new FileStream(temporaryFileName, FileMode.Create);
       var stamper = PdfStamper.CreateSignature(
         new PdfReader(request.SourceFile.OpenReadStream()),
         destinationFileStream,
         '\0', null, true);
       PrepareAppearance(stamper.SignatureAppearance, signData);
-      //DoSign(stamper.SignatureAppearance);
-
-      MakeSignature.SignDetached(
-        stamper.SignatureAppearance,
-        new EuroCertSignature(EuroCertAddress, signData.EuroCertApiKey, signData.EuroCertTaskId),
-        Chain, null, null, null, 0, CryptoStandard.CADES);
+      if (UsePrivateKeySigningAsDebuggingMethod)
+      {
+        SignUsingPrivateKey(stamper.SignatureAppearance);
+      }
+      else
+      {
+        MakeSignature.SignDetached(
+          stamper.SignatureAppearance,
+          new EuroCertSignature(EuroCertAddress, signData.EuroCertApiKey, signData.EuroCertTaskId),
+          Chain, null, null, null, 0, CryptoStandard.CADES);
+      }
       return Task.FromResult(temporaryFileName);
     }
 
-
-    private void DoSign(PdfSignatureAppearance signatureAppearance)
+    private void SignUsingPrivateKey(PdfSignatureAppearance signatureAppearance)
     {
-      // Step 3: Load PFX Certificate
       string pfxFilePath = @"C:\workspace\Sandbox\ConsoleApp4\test.p12";
       string pfxPassword = "qqqq";
-      Pkcs12Store pfxKeyStore = new Pkcs12Store(new FileStream(pfxFilePath, FileMode.Open, FileAccess.Read), pfxPassword.ToCharArray());
+      Pkcs12Store pfxKeyStore = new(new FileStream(pfxFilePath, FileMode.Open, FileAccess.Read), pfxPassword.ToCharArray());
       string alias = pfxKeyStore.Aliases.Cast<string>().FirstOrDefault(entryAlias => pfxKeyStore.IsKeyEntry(entryAlias));
-
       if (alias != null)
       {
         ICipherParameters privateKey = pfxKeyStore.GetKey(alias).Key;
         IExternalSignature pks = new PrivateKeySignature(privateKey, DigestAlgorithms.SHA256);
-        MakeSignature.SignDetached(signatureAppearance, pks, new Org.BouncyCastle.X509.X509Certificate[] { pfxKeyStore.GetCertificate(alias).Certificate }, null, null, null, 0, CryptoStandard.CADES);
+        MakeSignature.SignDetached(signatureAppearance, pks, new X509Certificate[] { pfxKeyStore.GetCertificate(alias).Certificate }, null, null, null, 0, CryptoStandard.CADES);
       }
       else
       {
         Console.WriteLine("Private key not found in the PFX certificate.");
       }
-
     }
 
     private X509Certificate[] Chain
@@ -102,6 +100,10 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
     {
       get => Configuration["Eurocert:WebServiceApiKey"]?.ToString() ?? "";
     }
+    private bool UsePrivateKeySigningAsDebuggingMethod
+    {
+      get => Configuration.GetValue<bool>("DebugMode:PKSigner");
+    }
 
     private void PrepareAppearance(PdfSignatureAppearance appearance, SignData signData)
     {
@@ -111,12 +113,12 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       }
       appearance.SetVisibleSignature(BuildBBOX(signData.Appearance), signData.Appearance.PageNumber, signData.SignatureFieldName);
       appearance.Layer2Text = "";
-      appearance.Image = Image.GetInstance(new StampDrawing(LogoFilePath).Stamp());
+      appearance.Image = Image.GetInstance(new StampGenerator(LogoFilePath).Stamp());
     }
 
     private Rectangle BuildBBOX(Appearance appearance)
     {
-      float ratio = (float)StampDrawing.Height / (float)StampDrawing.Width;
+      float ratio = (float)StampGenerator.Height / (float)StampGenerator.Width;
       if (appearance.Width * ratio < appearance.Height)
       {
 
