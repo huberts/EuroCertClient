@@ -2,6 +2,8 @@
 using iTextSharp.text.pdf;
 using iTextSharp.text.pdf.security;
 using Newtonsoft.Json;
+using Org.BouncyCastle.Crypto;
+using Org.BouncyCastle.Pkcs;
 using Org.BouncyCastle.X509;
 using static iTextSharp.text.Font;
 
@@ -24,8 +26,8 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       }
 
       SignData? signData = JsonConvert.DeserializeObject<SignData>(request.SignData);
-      if (string.IsNullOrEmpty(ServiceApiKey) 
-        || string.IsNullOrEmpty(signData?.ServiceApiKey) 
+      if (string.IsNullOrEmpty(ServiceApiKey)
+        || string.IsNullOrEmpty(signData?.ServiceApiKey)
         || !signData.ServiceApiKey.Equals(ServiceApiKey))
       {
         throw new ArgumentException("ServiceApiKey invalid.");
@@ -40,12 +42,36 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
         new PdfReader(request.SourceFile.OpenReadStream()),
         destinationFileStream,
         '\0', null, true);
-      PrepareAppearance(/*stamper.GetDocument(),*/ stamper.SignatureAppearance, signData.Appearance, signData.SignatureFieldName, Chain[0]);
+      PrepareAppearance(stamper.SignatureAppearance, signData);
+      //DoSign(stamper.SignatureAppearance);
+
       MakeSignature.SignDetached(
         stamper.SignatureAppearance,
         new EuroCertSignature(EuroCertAddress, signData.EuroCertApiKey, signData.EuroCertTaskId),
         Chain, null, null, null, 0, CryptoStandard.CADES);
       return Task.FromResult(temporaryFileName);
+    }
+
+
+    private void DoSign(PdfSignatureAppearance signatureAppearance)
+    {
+      // Step 3: Load PFX Certificate
+      string pfxFilePath = @"C:\workspace\Sandbox\ConsoleApp4\test.p12";
+      string pfxPassword = "qqqq";
+      Pkcs12Store pfxKeyStore = new Pkcs12Store(new FileStream(pfxFilePath, FileMode.Open, FileAccess.Read), pfxPassword.ToCharArray());
+      string alias = pfxKeyStore.Aliases.Cast<string>().FirstOrDefault(entryAlias => pfxKeyStore.IsKeyEntry(entryAlias));
+
+      if (alias != null)
+      {
+        ICipherParameters privateKey = pfxKeyStore.GetKey(alias).Key;
+        IExternalSignature pks = new PrivateKeySignature(privateKey, DigestAlgorithms.SHA256);
+        MakeSignature.SignDetached(signatureAppearance, pks, new Org.BouncyCastle.X509.X509Certificate[] { pfxKeyStore.GetCertificate(alias).Certificate }, null, null, null, 0, CryptoStandard.CADES);
+      }
+      else
+      {
+        Console.WriteLine("Private key not found in the PFX certificate.");
+      }
+
     }
 
     private X509Certificate[] Chain
@@ -77,96 +103,37 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       get => Configuration["Eurocert:WebServiceApiKey"]?.ToString() ?? "";
     }
 
-    private void PrepareAppearance(/*PdfDocument document,*/ PdfSignatureAppearance appearance,
-      Appearance? request, string fieldName, X509Certificate iX509Certificate)
+    private void PrepareAppearance(PdfSignatureAppearance appearance, SignData signData)
     {
-      if (request is null)
+      if (signData.Appearance is null)
+      {
         return;
-
-      Rectangle BBox = new(
-          request.X,
-          request.Y,
-          request.Width,
-          request.Height);
-
-      appearance.SetVisibleSignature(BBox, request.PageNumber, fieldName);
-
-      string certCN = "PREZYDENT MIASTA KRAKOWA";
-      string date = $"Data: {DateTime.Now:yyyy-MM-dd HH:mm}";
-      string footer = "(pieczęć elektroniczna)";
-
-      PaintAppearanceOnTemplate(appearance.GetLayer(2), BBox, certCN, date, footer);
-
+      }
+      appearance.SetVisibleSignature(BuildBBOX(signData.Appearance), signData.Appearance.PageNumber, signData.SignatureFieldName);
+      appearance.Layer2Text = "";
+      appearance.Image = Image.GetInstance(new StampDrawing(LogoFilePath).Stamp());
     }
 
-    private void PaintAppearanceOnTemplate(PdfTemplate template, Rectangle rect, string name, string date, string footer)
+    private Rectangle BuildBBOX(Appearance appearance)
     {
-      var regular = BaseFont.CreateFont(BaseFont.HELVETICA, "Cp1250", BaseFont.EMBEDDED);
-      var bold = BaseFont.CreateFont(BaseFont.HELVETICA_BOLD, "Cp1250", BaseFont.EMBEDDED);
+      float ratio = (float)StampDrawing.Height / (float)StampDrawing.Width;
+      if (appearance.Width * ratio < appearance.Height)
+      {
 
-      var size = CalculateFontSize();
-
-      var nameText = new Text(name)
-        .SetFont(bold)
-        .SetFontColor(BaseColor.BLUE)
-        .SetFontSize(size);
-
-      var dateText = new Text(date)
-        .SetFont(regular)
-        .SetFontSize(size);
-
-      var footerText = new Text(footer)
-        .SetFont(regular)
-        .SetFontSize(size);
-
-
-
-      new Canvas(canvas, new Rectangle(1, 1, rect.Width / 3 - 2, rect.Height - 2))
-        .Add(new Image(ImageDataFactory.Create(LogoFilePath)).SetAutoScale(true))
-        .Close();
-
-      PaintTextCanvas(
-        canvas,
-        new Rectangle(rect.Width / 3, rect.Height / 2, rect.Width * 2 / 3, rect.Height / 2),
-        name,
-        bold,
-        BaseColor.BLUE,
-        size);
-
-      PaintTextCanvas(
-        canvas,
-        new Rectangle(rect.Width / 3, rect.Height * 3 / 8, rect.Width * 2 / 3, rect.Height / 4),
-        date,
-        regular,
-        BaseColor.BLACK,
-        size);
-
-      PaintTextCanvas(
-        canvas,
-        new Rectangle(rect.Width / 3, rect.Height / 8, rect.Width * 2 / 3, rect.Height / 4),
-        footer,
-        regular,
-        BaseColor.BLACK,
-        size);
-    }
-
-    private void PaintTextCanvas(PdfCanvas canvas, Rectangle rect, string text, PdfFont font, BaseColor color, float size)
-    {
-      new Canvas(canvas, rect).Add(
-        new Paragraph(new Text(text)
-        .SetFont(font)
-        .SetFontColor(color)
-        .SetFontSize(size)
-        )
-        .SetTextAlignment(Element.ALIGN_CENTER)
-        .SetHorizontalAlignment(Element.ALIGN_CENTER)
-        .SetVerticalAlignment(Element.ALIGN_MIDDLE)
-        ).Close();
-    }
-
-    private float CalculateFontSize()
-    {
-      return 4;
+        var width = appearance.Width;
+        var height = appearance.Width * ratio;
+        var x = appearance.X;
+        var y = appearance.Y + (appearance.Height - height) / 2;
+        return new(x + 1, y + 1, x + width - 1, y + height - 1);
+      }
+      else
+      {
+        var width = appearance.Height / ratio;
+        var height = appearance.Height;
+        var x = appearance.X + (appearance.Width - width) / 2;
+        var y = appearance.Y;
+        return new(x + 1, y + 1, x + width - 1, y + height - 1);
+      }
     }
   }
 }
