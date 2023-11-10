@@ -40,7 +40,7 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
         destinationFileStream,
         '\0', null, true);
       PrepareAppearance(stamper.SignatureAppearance, signData);
-      if (UsePrivateKeySigningAsDebuggingMethod)
+      if (DebugMode_PKSigner)
       {
         SignUsingPrivateKey(stamper.SignatureAppearance);
       }
@@ -56,9 +56,7 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
 
     private void SignUsingPrivateKey(PdfSignatureAppearance signatureAppearance)
     {
-      string pfxFilePath = @"C:\workspace\Sandbox\ConsoleApp4\test.p12";
-      string pfxPassword = "qqqq";
-      Pkcs12Store pfxKeyStore = new(new FileStream(pfxFilePath, FileMode.Open, FileAccess.Read), pfxPassword.ToCharArray());
+      Pkcs12Store pfxKeyStore = new(new FileStream(DebugMode_PKPath, FileMode.Open, FileAccess.Read), DebugMode_PKPass.ToCharArray());
       string alias = pfxKeyStore.Aliases.Cast<string>().FirstOrDefault(entryAlias => pfxKeyStore.IsKeyEntry(entryAlias));
       if (alias != null)
       {
@@ -100,9 +98,17 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
     {
       get => Configuration["Eurocert:WebServiceApiKey"]?.ToString() ?? "";
     }
-    private bool UsePrivateKeySigningAsDebuggingMethod
+    private bool DebugMode_PKSigner
     {
       get => Configuration.GetValue<bool>("DebugMode:PKSigner");
+    }
+    private string DebugMode_PKPath
+    {
+      get => Configuration["DebugMode:PKPath"]?.ToString() ?? "";
+    }
+    private string DebugMode_PKPass
+    {
+      get => Configuration["DebugMode:PKPass"]?.ToString() ?? "";
     }
 
     private void PrepareAppearance(PdfSignatureAppearance appearance, SignData signData)
