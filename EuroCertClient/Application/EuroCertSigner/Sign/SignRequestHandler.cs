@@ -18,13 +18,8 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       Configuration = configuration;
     }
 
-    public Task<string> Handle(SignRequest request)
+    public Task<string> Handle(SignRequest request, ILogger _logger)
     {
-      if (request.SourceFile is null)
-      {
-        throw new ArgumentNullException("SourceFile not found!");
-      }
-
       SignData? signData = JsonConvert.DeserializeObject<SignData>(request.SignData);
       if (string.IsNullOrEmpty(ServiceApiKey)
         || string.IsNullOrEmpty(signData?.ServiceApiKey)
@@ -32,14 +27,19 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       {
         throw new ArgumentException("ServiceApiKey invalid.");
       }
+      _logger.LogInformation("Request authorized.");
+      _logger.LogInformation($"SignImage: {request.SignImage?.Name ?? "No image."}");
 
       var temporaryFileName = Path.GetTempFileName();
       using var destinationFileStream = new FileStream(temporaryFileName, FileMode.Create);
+
       var stamper = PdfStamper.CreateSignature(
         new PdfReader(request.SourceFile.OpenReadStream()),
         destinationFileStream,
         '\0', null, true);
       PrepareAppearance(stamper.SignatureAppearance, signData);
+      _logger.LogInformation("Create signature stamper.");
+
       if (DebugMode_PKSigner)
       {
         SignUsingPrivateKey(stamper.SignatureAppearance);
@@ -48,9 +48,11 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       {
         MakeSignature.SignDetached(
           stamper.SignatureAppearance,
-          new EuroCertSignature(EuroCertAddress, signData.EuroCertApiKey, signData.EuroCertTaskId),
+          new EuroCertSignature(EuroCertAddress, signData.EuroCertApiKey, signData.EuroCertTaskId, _logger),
           Chain, null, null, null, 0, CryptoStandard.CADES);
       }
+      _logger.LogInformation("MakeSignature.SignDetached");
+      
       return Task.FromResult(temporaryFileName);
     }
 

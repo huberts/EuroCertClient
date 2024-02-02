@@ -12,12 +12,15 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
     private readonly string _address;
     private readonly string _apiKey;
     private readonly string _taskId;
+    private readonly ILogger _logger;
 
-    public EuroCertSignature(string address, string apiKey, string taskId)
+    public EuroCertSignature(string address, string apiKey, string taskId, ILogger logger)
     {
       _address = address;
       _apiKey = apiKey;
       _taskId = taskId;
+      _logger = logger;
+      _logger.LogInformation("EuroCertSignature");
     }
 
     public string GetEncryptionAlgorithm() => "RSA";
@@ -26,20 +29,36 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
 
     public byte[] Sign(byte[] message)
     {
-      var content = new StringContent(JsonConvert.SerializeObject(new
+      string requestContent = JsonConvert.SerializeObject(new
       {
         Algorithm = "SHA256",
         Hash = Convert.ToBase64String(System.Security.Cryptography.SHA256.HashData(message)),
-      }), Encoding.UTF8, "application/json");
+      });
+      _logger.LogInformation("Before Sign: " + requestContent);
+
+      var content = new StringContent(requestContent, Encoding.UTF8, "application/json");
       content.Headers.Add("API-KEY", _apiKey);
 
-      var response = new HttpClient().PostAsync($"{_address}/{_taskId}", content).Result;
+      EuroCertResponse result = new EuroCertResponse();
+      string address = $"{_address}/{_taskId}";
+      try
+      {
+        var response = new HttpClient().PostAsync(address, content).Result;
+        result = JsonConvert.DeserializeObject<EuroCertResponse>(response.Content.ReadAsStringAsync().Result)!;
+      } 
+      catch (Exception ex)
+      {
+        _logger.LogInformation(address);
+        _logger.LogCritical(ex, "EuroCertResponse");
+        throw new ArgumentException($"EuroCertResponse: {ex.Message}", ex);
+      }
 
-      var result = JsonConvert.DeserializeObject<EuroCertResponse>(response.Content.ReadAsStringAsync().Result)!;
       if (result.Error != 0)
       {
-        throw new EuroCertException(result.Error, result.ErrorDescription);
+        throw new ArgumentException($"EuroCertSignature After Post: Code<{result.Error}> {result.ErrorDescription}");
       }
+      _logger.LogInformation($"After Sign: {result.Error}");
+
       return Convert.FromBase64String(result.Signature);
     }
   }
