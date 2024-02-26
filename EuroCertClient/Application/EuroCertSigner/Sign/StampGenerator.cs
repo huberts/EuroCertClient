@@ -7,18 +7,16 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
 {
   public class StampGenerator
   {
-    private readonly string _logoFilePath;
     public static readonly int Width = 520;
     public static readonly int Height = 163;
 
-    public StampGenerator(string logoFilePath) 
+    public StampGenerator() 
     {
-      _logoFilePath = logoFilePath;
     }
 
-    public string Stamp()
+    public string Stamp(string logoFilePath)
     {
-      Image image = Image.FromFile(_logoFilePath);
+      Image image = Image.FromFile(logoFilePath);
       Bitmap bitmap = new(Width, Height);
       Graphics graphics = Graphics.FromImage(bitmap);
       
@@ -33,6 +31,28 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       var temporaryFileName = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid()}.png");
       bitmap.Save(temporaryFileName, ImageFormat.Png);
       return temporaryFileName;
+    }
+
+    public iTextSharp.text.Rectangle BuildBBOX(Appearance appearance)
+    {
+      float ratio = (float)Height / (float)Width;
+      if (appearance.Width * ratio < appearance.Height)
+      {
+
+        var width = appearance.Width;
+        var height = appearance.Width * ratio;
+        var x = appearance.X;
+        var y = appearance.Y + (appearance.Height - height) / 2;
+        return new(x + 1, y + 1, x + width - 1, y + height - 1);
+      }
+      else
+      {
+        var width = appearance.Height / ratio;
+        var height = appearance.Height;
+        var x = appearance.X + (appearance.Width - width) / 2;
+        var y = appearance.Y;
+        return new(x + 1, y + 1, x + width - 1, y + height - 1);
+      }
     }
   }
 }

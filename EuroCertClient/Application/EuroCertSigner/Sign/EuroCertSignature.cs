@@ -1,8 +1,5 @@
 ﻿using iTextSharp.text.pdf.security;
 using Newtonsoft.Json;
-using System.IO;
-using System.Net;
-using System.Security.Cryptography;
 using System.Text;
 
 namespace EuroCertClient.Application.EuroCertSigner.Sign
@@ -29,7 +26,7 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
 
     public byte[] Sign(byte[] message)
     {
-      string requestContent = JsonConvert.SerializeObject(new
+      string requestContent = JsonConvert.SerializeObject(new EuroCertRequest
       {
         Algorithm = "SHA256",
         Hash = Convert.ToBase64String(System.Security.Cryptography.SHA256.HashData(message)),
@@ -44,7 +41,14 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       try
       {
         var response = new HttpClient().PostAsync(address, content).Result;
-        result = JsonConvert.DeserializeObject<EuroCertResponse>(response.Content.ReadAsStringAsync().Result)!;
+        if (response.IsSuccessStatusCode)
+        {
+          result = JsonConvert.DeserializeObject<EuroCertResponse>(response.Content.ReadAsStringAsync().Result)!;
+        }
+        else
+        {
+          throw new ArgumentException($"StatusCode: {response.StatusCode} ReasonPhrase: {response.ReasonPhrase}");
+        }
       } 
       catch (Exception ex)
       {
@@ -55,6 +59,7 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
 
       if (result.Error != 0)
       {
+        _logger.LogInformation(address);
         throw new ArgumentException($"EuroCertSignature After Post: Code<{result.Error}> {result.ErrorDescription}");
       }
       _logger.LogInformation($"After Sign: {result.Error}");

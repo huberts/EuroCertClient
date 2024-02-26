@@ -4,8 +4,9 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
 {
   public class SignRequest
   {
-    public string SignData { get; set; }
+    public string SignData { get; set; } = string.Empty;
     public IFormFile? SourceFile { get; set; } = null;
+    public IFormFile? SignImage { get; set; } = null;
   }
 
   public class SignData

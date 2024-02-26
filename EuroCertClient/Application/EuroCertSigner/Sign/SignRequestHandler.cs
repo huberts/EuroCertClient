@@ -5,7 +5,6 @@ using Newtonsoft.Json;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Pkcs;
 using Org.BouncyCastle.X509;
-using static iTextSharp.text.Font;
 
 namespace EuroCertClient.Application.EuroCertSigner.Sign
 {
@@ -34,11 +33,13 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       using var destinationFileStream = new FileStream(temporaryFileName, FileMode.Create);
 
       var stamper = PdfStamper.CreateSignature(
-        new PdfReader(request.SourceFile.OpenReadStream()),
+        new PdfReader(request.SourceFile?.OpenReadStream()),
         destinationFileStream,
         '\0', null, true);
-      PrepareAppearance(stamper.SignatureAppearance, signData);
+      PrepareAppearance(stamper.SignatureAppearance, signData, request.SignImage);
       _logger.LogInformation("Create signature stamper.");
+
+      IExternalSignature externalSignature = GetExternalSignature(signData, _logger);
 
       if (DebugMode_PKSigner)
       {
@@ -48,7 +49,7 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       {
         MakeSignature.SignDetached(
           stamper.SignatureAppearance,
-          new EuroCertSignature(EuroCertAddress, signData.EuroCertApiKey, signData.EuroCertTaskId, _logger),
+          externalSignature,
           Chain, null, null, null, 0, CryptoStandard.CADES);
       }
       _logger.LogInformation("MakeSignature.SignDetached");
@@ -56,9 +57,18 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       return Task.FromResult(temporaryFileName);
     }
 
+    private IExternalSignature GetExternalSignature(SignData signData, ILogger logger)
+    {
+      if (CloudSignerName == "miPieczec")
+        return new miPieczecSignature(EuroCertAddress, signData.EuroCertApiKey, logger);
+      else
+        return new EuroCertSignature(EuroCertAddress, signData.EuroCertApiKey, signData.EuroCertTaskId, logger);
+    }
+
     private void SignUsingPrivateKey(PdfSignatureAppearance signatureAppearance)
     {
-      Pkcs12Store pfxKeyStore = new(new FileStream(DebugMode_PKPath, FileMode.Open, FileAccess.Read), DebugMode_PKPass.ToCharArray());
+      using var cert = new FileStream(DebugMode_PKPath, FileMode.Open, FileAccess.Read);
+      Pkcs12Store pfxKeyStore = new(cert, DebugMode_PKPass.ToCharArray());
       string alias = pfxKeyStore.Aliases.Cast<string>().FirstOrDefault(entryAlias => pfxKeyStore.IsKeyEntry(entryAlias));
       if (alias != null)
       {
@@ -100,6 +110,10 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
     {
       get => Configuration["Eurocert:WebServiceApiKey"]?.ToString() ?? "";
     }
+    private string CloudSignerName
+    {
+      get => Configuration["Eurocert:CloudSignerName"]?.ToString() ?? "";
+    }
     private bool DebugMode_PKSigner
     {
       get => Configuration.GetValue<bool>("DebugMode:PKSigner");
@@ -113,37 +127,30 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       get => Configuration["DebugMode:PKPass"]?.ToString() ?? "";
     }
 
-    private void PrepareAppearance(PdfSignatureAppearance appearance, SignData signData)
+    private void PrepareAppearance(PdfSignatureAppearance appearance, SignData signData, IFormFile? signImage)
     {
       if (signData.Appearance is null)
       {
         return;
       }
-      appearance.SetVisibleSignature(BuildBBOX(signData.Appearance), signData.Appearance.PageNumber, signData.SignatureFieldName);
-      appearance.Layer2Text = "";
-      appearance.Image = Image.GetInstance(new StampGenerator(LogoFilePath).Stamp());
-    }
 
-    private Rectangle BuildBBOX(Appearance appearance)
-    {
-      float ratio = (float)StampGenerator.Height / (float)StampGenerator.Width;
-      if (appearance.Width * ratio < appearance.Height)
+      if (signImage is null)
       {
-
-        var width = appearance.Width;
-        var height = appearance.Width * ratio;
-        var x = appearance.X;
-        var y = appearance.Y + (appearance.Height - height) / 2;
-        return new(x + 1, y + 1, x + width - 1, y + height - 1);
+        var stamp = new StampGenerator();
+        appearance.SetVisibleSignature(stamp.BuildBBOX(signData.Appearance), signData.Appearance.PageNumber, signData.SignatureFieldName);
+        appearance.Image = Image.GetInstance(stamp.Stamp(LogoFilePath));
       }
       else
       {
-        var width = appearance.Height / ratio;
-        var height = appearance.Height;
-        var x = appearance.X + (appearance.Width - width) / 2;
-        var y = appearance.Y;
-        return new(x + 1, y + 1, x + width - 1, y + height - 1);
+        Rectangle pageRect = new(
+          signData.Appearance.X,
+          signData.Appearance.Y,
+          signData.Appearance.X + signData.Appearance.Width,
+          signData.Appearance.Y + signData.Appearance.Height);
+        appearance.SetVisibleSignature(pageRect, signData.Appearance.PageNumber, signData.SignatureFieldName);
+        appearance.Image = Image.GetInstance(signImage.OpenReadStream());
       }
+      appearance.Layer2Text = "";
     }
   }
 }
