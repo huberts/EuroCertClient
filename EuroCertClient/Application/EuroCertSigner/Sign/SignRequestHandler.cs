@@ -68,7 +68,8 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
     private void SignUsingPrivateKey(PdfSignatureAppearance signatureAppearance)
     {
       using var cert = new FileStream(DebugMode_PKPath, FileMode.Open, FileAccess.Read);
-      Pkcs12Store pfxKeyStore = new(cert, DebugMode_PKPass.ToCharArray());
+      var pfxKeyStore = new Pkcs12StoreBuilder().Build();
+      pfxKeyStore.Load(cert, DebugMode_PKPass.ToCharArray());
       string alias = pfxKeyStore.Aliases.Cast<string>().FirstOrDefault(entryAlias => pfxKeyStore.IsKeyEntry(entryAlias));
       if (alias != null)
       {
