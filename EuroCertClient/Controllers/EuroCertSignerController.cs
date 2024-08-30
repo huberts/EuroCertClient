@@ -1,7 +1,5 @@
 using EuroCertClient.Application.EuroCertSigner.Sign;
 using Microsoft.AspNetCore.Mvc;
-using System.Net;
-using System.Net.Mime;
 
 namespace EuroCertClient.Controllers
 {
@@ -32,7 +30,8 @@ namespace EuroCertClient.Controllers
         var sourceFileName = request.SourceFile?.FileName ?? "";
         _logger.LogInformation($"Signed: {sourceFileName}");
         var responseFileName = $"{Path.GetFileNameWithoutExtension(sourceFileName)}_signed{Path.GetExtension(sourceFileName)}";
-        return File(new FileStream(destinationFileName, FileMode.Open), "application/octet-stream", responseFileName);
+        var destFile = new FileStream(destinationFileName, FileMode.Open, FileAccess.Read, FileShare.None, 4096, FileOptions.DeleteOnClose);
+        return File(destFile, "application/octet-stream", responseFileName);
       }
       catch (Exception e)
       {

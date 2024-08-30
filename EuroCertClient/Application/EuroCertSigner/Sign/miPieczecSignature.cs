@@ -1,6 +1,6 @@
-﻿using iTextSharp.text.pdf.security;
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using System.Text;
+using iText.Signatures;
 
 namespace EuroCertClient.Application.EuroCertSigner.Sign
 {
@@ -18,9 +18,11 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       _logger.LogInformation("miPieczecSignature");
     }
 
-    public string GetEncryptionAlgorithm() => "RSA";
+    public string GetSignatureAlgorithmName() => "RSA";
 
-    public string GetHashAlgorithm() => DigestAlgorithms.SHA256;
+    public string GetDigestAlgorithmName() => DigestAlgorithms.SHA256;
+
+    public ISignatureMechanismParams? GetSignatureMechanismParameters() => null;
 
     public byte[] Sign(byte[] message)
     {
