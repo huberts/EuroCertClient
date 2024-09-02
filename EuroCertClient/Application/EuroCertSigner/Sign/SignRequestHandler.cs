@@ -1,10 +1,18 @@
-﻿using iTextSharp.text;
-using iTextSharp.text.pdf;
-using iTextSharp.text.pdf.security;
+﻿using iText.Bouncycastle.Crypto;
+using iText.Bouncycastle.X509;
+using iText.Commons.Bouncycastle.Asn1.Esf;
+using iText.Commons.Bouncycastle.Cert;
+using iText.Forms.Form.Element;
+using iText.IO.Image;
+using iText.Kernel.Pdf;
+using iText.Signatures;
 using Newtonsoft.Json;
+using Org.BouncyCastle.Asn1.Esf;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Pkcs;
-using Org.BouncyCastle.X509;
+using System.Net.Sockets;
+using System.Runtime.ConstrainedExecution;
+using System.Security.Cryptography.X509Certificates;
 
 namespace EuroCertClient.Application.EuroCertSigner.Sign
 {
@@ -29,70 +37,94 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       _logger.LogInformation("Request authorized.");
       _logger.LogInformation($"SignImage: {request.SignImage?.Name ?? "No image."}");
 
-      var temporaryFileName = Path.GetTempFileName();
-      using var destinationFileStream = new FileStream(temporaryFileName, FileMode.Create);
+      using var srcFileStream = request.SourceFile?.OpenReadStream();
+      using var destFileStream = new FileStream(Path.GetTempFileName(), FileMode.Create);
+      _logger.LogInformation($"Destination file created: {destFileStream.Name}");
 
-      var stamper = PdfStamper.CreateSignature(
-        new PdfReader(request.SourceFile?.OpenReadStream()),
-        destinationFileStream,
-        '\0', null, true);
-      PrepareAppearance(stamper.SignatureAppearance, signData, request.SignImage);
+      var signer = new PdfSigner(
+          new PdfReader(srcFileStream).SetStrictnessLevel(PdfReader.StrictnessLevel.CONSERVATIVE),
+          destFileStream,
+          new StampingProperties().UseAppendMode());
+      _logger.LogInformation($"PdfSigner created. PDF Version {signer.GetDocument().GetPdfVersion()}");
+      
+      PrepareAppearance(signer, signData, request.SignImage);
       _logger.LogInformation("Create signature stamper.");
 
       IExternalSignature externalSignature = GetExternalSignature(signData, _logger);
+      _logger.LogInformation($"CreateExternalSignature {externalSignature}");
 
-      if (DebugMode_PKSigner)
-      {
-        SignUsingPrivateKey(stamper.SignatureAppearance);
-      }
-      else
-      {
-        MakeSignature.SignDetached(
-          stamper.SignatureAppearance,
-          externalSignature,
-          Chain, null, null, null, 0, CryptoStandard.CADES);
-      }
+      IX509Certificate[] chain = GetChain();
+      _logger.LogInformation($"Certificate loaded {chain.First().GetSubjectDN()}");
+
+      signer.SignDetached(
+          externalSignature, chain, null, null, null, 0, PdfSigner.CryptoStandard.CADES);
       _logger.LogInformation("MakeSignature.SignDetached");
-      
-      return Task.FromResult(temporaryFileName);
+
+      return Task.FromResult(destFileStream.Name);
     }
 
     private IExternalSignature GetExternalSignature(SignData signData, ILogger logger)
     {
+      if (DebugMode_PKSigner)
+      {
+        using var cert = new FileStream(DebugMode_PKPath, FileMode.Open, FileAccess.Read);
+        Pkcs12Store pfxKeyStore = new Pkcs12StoreBuilder().Build();
+        pfxKeyStore.Load(cert, DebugMode_PKPass.ToCharArray());
+        string alias = pfxKeyStore.Aliases.Cast<string>().FirstOrDefault(pfxKeyStore.IsKeyEntry);
+        if (alias == null)
+          throw new ArgumentException("Private key not found in the PFX certificate.");
+
+        ICipherParameters privateKey = pfxKeyStore.GetKey(alias).Key;
+        return new PrivateKeySignature(new PrivateKeyBC(privateKey), DigestAlgorithms.SHA256);
+      }
+
       if (CloudSignerName == "miPieczec")
         return new miPieczecSignature(EuroCertAddress, signData.EuroCertApiKey, logger);
       else
         return new EuroCertSignature(EuroCertAddress, signData.EuroCertApiKey, signData.EuroCertTaskId, logger);
     }
 
-    private void SignUsingPrivateKey(PdfSignatureAppearance signatureAppearance)
+    private IX509Certificate[] GetChain()
     {
-      using var cert = new FileStream(DebugMode_PKPath, FileMode.Open, FileAccess.Read);
-      var pfxKeyStore = new Pkcs12StoreBuilder().Build();
-      pfxKeyStore.Load(cert, DebugMode_PKPass.ToCharArray());
-      string alias = pfxKeyStore.Aliases.Cast<string>().FirstOrDefault(entryAlias => pfxKeyStore.IsKeyEntry(entryAlias));
-      if (alias != null)
+      X509Certificate2 cert = DebugMode_PKSigner
+        ? new X509Certificate2(DebugMode_PKPath, DebugMode_PKPass)
+        : new X509Certificate2(CertificateFilePath);
+      
+      return new IX509Certificate[]
       {
-        ICipherParameters privateKey = pfxKeyStore.GetKey(alias).Key;
-        IExternalSignature pks = new PrivateKeySignature(privateKey, DigestAlgorithms.SHA256);
-        MakeSignature.SignDetached(signatureAppearance, pks, new X509Certificate[] { pfxKeyStore.GetCertificate(alias).Certificate }, null, null, null, 0, CryptoStandard.CADES);
-      }
-      else
-      {
-        Console.WriteLine("Private key not found in the PFX certificate.");
-      }
+        new X509CertificateBC(new Org.BouncyCastle.X509.X509Certificate(cert.RawData))
+      };
     }
 
-    private X509Certificate[] Chain
+    private void PrepareAppearance(PdfSigner signer, SignData signData, IFormFile? signImage)
     {
-      get
+      if (signData.Appearance is null)
       {
-        using var certificate = File.Open(CertificateFilePath, FileMode.Open);
-        return new X509Certificate[]
-          {
-            new X509CertificateParser().ReadCertificate(certificate)
-          };
+        throw new ArgumentException("SignData.Appearance is required.");
       }
+
+      if (signImage is null)
+      {
+        throw new ArgumentException("SignImage is required.");
+      }
+
+      var appearance = new SignatureFieldAppearance(signData.SignatureFieldName);
+      appearance.SetPageNumber(signData.Appearance.PageNumber);
+
+      using var ms = new MemoryStream();
+      signImage.CopyTo(ms);
+      appearance.SetContent(ImageDataFactory.Create(ms.ToArray()));
+
+      signer.SetSignatureAppearance(appearance);
+      signer.SetFieldName(signData.SignatureFieldName);
+      signer.SetPageNumber(signData.Appearance.PageNumber);
+      signer.SetPageRect(new iText.Kernel.Geom.Rectangle(
+        signData.Appearance.X,
+        signData.Appearance.Y,
+        signData.Appearance.Width,
+        signData.Appearance.Height));
+      signer.SetReason(signData.Appearance.Reason);
+      signer.SetLocation(signData.Appearance.Location);
     }
 
     private string CertificateFilePath
@@ -126,32 +158,6 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
     private string DebugMode_PKPass
     {
       get => Configuration["DebugMode:PKPass"]?.ToString() ?? "";
-    }
-
-    private void PrepareAppearance(PdfSignatureAppearance appearance, SignData signData, IFormFile? signImage)
-    {
-      if (signData.Appearance is null)
-      {
-        return;
-      }
-
-      if (signImage is null)
-      {
-        var stamp = new StampGenerator();
-        appearance.SetVisibleSignature(stamp.BuildBBOX(signData.Appearance), signData.Appearance.PageNumber, signData.SignatureFieldName);
-        appearance.Image = Image.GetInstance(stamp.Stamp(LogoFilePath));
-      }
-      else
-      {
-        Rectangle pageRect = new(
-          signData.Appearance.X,
-          signData.Appearance.Y,
-          signData.Appearance.X + signData.Appearance.Width,
-          signData.Appearance.Y + signData.Appearance.Height);
-        appearance.SetVisibleSignature(pageRect, signData.Appearance.PageNumber, signData.SignatureFieldName);
-        appearance.Image = Image.GetInstance(signImage.OpenReadStream());
-      }
-      appearance.Layer2Text = "";
     }
   }
 }

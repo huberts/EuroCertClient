@@ -1,6 +1,6 @@
-﻿using iTextSharp.text.pdf.security;
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using System.Text;
+using iText.Signatures;
 
 namespace EuroCertClient.Application.EuroCertSigner.Sign
 {
@@ -20,9 +20,11 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       _logger.LogInformation("EuroCertSignature");
     }
 
-    public string GetEncryptionAlgorithm() => "RSA";
+    public string GetSignatureAlgorithmName() => "RSA";
 
-    public string GetHashAlgorithm() => DigestAlgorithms.SHA256;
+    public string GetDigestAlgorithmName() => DigestAlgorithms.SHA256;
+
+    public ISignatureMechanismParams? GetSignatureMechanismParameters() => null;
 
     public byte[] Sign(byte[] message)
     {
@@ -40,7 +42,8 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       string address = $"{_address}/{_taskId}";
       try
       {
-        var response = new HttpClient().PostAsync(address, content).Result;
+        using var client = new HttpClient();
+        var response = client.PostAsync(address, content).Result;
         if (response.IsSuccessStatusCode)
         {
           result = JsonConvert.DeserializeObject<EuroCertResponse>(response.Content.ReadAsStringAsync().Result)!;
