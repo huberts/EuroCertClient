@@ -118,13 +118,24 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       signer.SetSignatureAppearance(appearance);
       signer.SetFieldName(signData.SignatureFieldName);
       signer.SetPageNumber(signData.Appearance.PageNumber);
-      signer.SetPageRect(new iText.Kernel.Geom.Rectangle(
+      signer.SetReason(signData.Appearance.Reason);
+      signer.SetLocation(signData.Appearance.Location);
+
+      var rect = new iText.Kernel.Geom.Rectangle(
         signData.Appearance.X,
         signData.Appearance.Y,
         signData.Appearance.Width,
-        signData.Appearance.Height));
-      signer.SetReason(signData.Appearance.Reason);
-      signer.SetLocation(signData.Appearance.Location);
+        signData.Appearance.Height);
+
+      var page = signer.GetDocument().GetPage(signData.Appearance.PageNumber);
+      if (page.GetRotation() == 90 || page.GetRotation() == 270)
+        rect = new iText.Kernel.Geom.Rectangle(
+          rect.GetY(), 
+          page.GetPageSize().GetHeight() - rect.GetX() - rect.GetWidth(), 
+          rect.GetHeight(), 
+          rect.GetWidth());
+
+      signer.SetPageRect(rect);
     }
 
     private string CertificateFilePath
