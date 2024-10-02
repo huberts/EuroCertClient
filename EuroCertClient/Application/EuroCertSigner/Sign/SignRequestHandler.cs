@@ -10,6 +10,7 @@ using Newtonsoft.Json;
 using Org.BouncyCastle.Asn1.Esf;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Pkcs;
+using System.Drawing;
 using System.Net.Sockets;
 using System.Runtime.ConstrainedExecution;
 using System.Security.Cryptography.X509Certificates;
@@ -27,13 +28,15 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
 
     public Task<string> Handle(SignRequest request, ILogger _logger)
     {
+      _logger.LogInformation("SignRequestHandler");
       SignData? signData = JsonConvert.DeserializeObject<SignData>(request.SignData);
-      if (string.IsNullOrEmpty(ServiceApiKey)
-        || string.IsNullOrEmpty(signData?.ServiceApiKey)
-        || !signData.ServiceApiKey.Equals(ServiceApiKey))
-      {
+      if (string.IsNullOrEmpty(ServiceApiKey))
+        throw new ArgumentException("No ServiceApiKey in configuration.");
+      if (string.IsNullOrEmpty(signData?.ServiceApiKey))
+        throw new ArgumentException("ServiceApiKey is empty.");
+      if (!signData.ServiceApiKey.Equals(ServiceApiKey))
         throw new ArgumentException("ServiceApiKey invalid.");
-      }
+
       _logger.LogInformation("Request authorized.");
       _logger.LogInformation($"SignImage: {request.SignImage?.Name ?? "No image."}");
 
@@ -128,12 +131,20 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
         signData.Appearance.Height);
 
       var page = signer.GetDocument().GetPage(signData.Appearance.PageNumber);
-      if (page.GetRotation() == 90 || page.GetRotation() == 270)
+      if (page.GetRotation() == 270)
         rect = new iText.Kernel.Geom.Rectangle(
           rect.GetY(), 
           page.GetPageSize().GetHeight() - rect.GetX() - rect.GetWidth(), 
           rect.GetHeight(), 
-          rect.GetWidth());
+          rect.GetWidth()
+          );
+      if (page.GetRotation() == 90)
+        rect = new iText.Kernel.Geom.Rectangle(
+          page.GetPageSize().GetWidth() - rect.GetY() - rect.GetHeight(),
+          rect.GetX(),
+          rect.GetHeight(),
+          rect.GetWidth()
+          );
 
       signer.SetPageRect(rect);
     }

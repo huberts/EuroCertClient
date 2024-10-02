@@ -4,7 +4,10 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>2023.4.1</Version>
+	<AssemblyVersion>2024.4.0</AssemblyVersion>
+    <FileVersion>2024.4.0</FileVersion>
+    <Version>2024.4.0</Version>
+	<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>
