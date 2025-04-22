@@ -1,6 +1,7 @@
 ﻿using Newtonsoft.Json;
 using System.Text;
 using iText.Signatures;
+using iText.Kernel.Crypto;
 
 namespace EuroCertClient.Application.EuroCertSigner.Sign
 {

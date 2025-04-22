@@ -22,7 +22,7 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
 
     public string GetSignatureAlgorithmName() => "RSA";
 
-    public string GetDigestAlgorithmName() => DigestAlgorithms.SHA256;
+    public string GetDigestAlgorithmName() => iText.Kernel.Crypto.DigestAlgorithms.SHA256;
 
     public ISignatureMechanismParams? GetSignatureMechanismParameters() => null;
 

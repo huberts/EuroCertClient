@@ -1,18 +1,14 @@
 ﻿using iText.Bouncycastle.Crypto;
 using iText.Bouncycastle.X509;
-using iText.Commons.Bouncycastle.Asn1.Esf;
 using iText.Commons.Bouncycastle.Cert;
 using iText.Forms.Form.Element;
 using iText.IO.Image;
+using iText.Kernel.Crypto;
 using iText.Kernel.Pdf;
 using iText.Signatures;
 using Newtonsoft.Json;
-using Org.BouncyCastle.Asn1.Esf;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Pkcs;
-using System.Drawing;
-using System.Net.Sockets;
-using System.Runtime.ConstrainedExecution;
 using System.Security.Cryptography.X509Certificates;
 
 namespace EuroCertClient.Application.EuroCertSigner.Sign
@@ -118,12 +114,6 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       signImage.CopyTo(ms);
       appearance.SetContent(ImageDataFactory.Create(ms.ToArray()));
 
-      signer.SetSignatureAppearance(appearance);
-      signer.SetFieldName(signData.SignatureFieldName);
-      signer.SetPageNumber(signData.Appearance.PageNumber);
-      signer.SetReason(signData.Appearance.Reason);
-      signer.SetLocation(signData.Appearance.Location);
-
       var rect = new iText.Kernel.Geom.Rectangle(
         signData.Appearance.X,
         signData.Appearance.Y,
@@ -145,8 +135,15 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
           rect.GetHeight(),
           rect.GetWidth()
           );
-
-      signer.SetPageRect(rect);
+      
+      var properties = new SignerProperties();
+      properties.SetReason(signData.Appearance.Reason);
+      properties.SetLocation(signData.Appearance.Location);
+      properties.SetPageNumber(signData.Appearance.PageNumber);
+      properties.SetFieldName(signData.SignatureFieldName);
+      properties.SetPageRect(rect);
+      properties.SetSignatureAppearance(appearance);
+      signer.SetSignerProperties(properties);
     }
 
     private string CertificateFilePath
