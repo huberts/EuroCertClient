@@ -1,18 +1,11 @@
-﻿using iText.Bouncycastle.Crypto;
-using iText.Bouncycastle.X509;
-using iText.Commons.Bouncycastle.Asn1.Esf;
-using iText.Commons.Bouncycastle.Cert;
-using iText.Forms.Form.Element;
-using iText.IO.Image;
-using iText.Kernel.Pdf;
-using iText.Signatures;
+﻿using iTextSharp.text;
+using iTextSharp.text.pdf;
+using iTextSharp.text.pdf.security;
 using Newtonsoft.Json;
-using Org.BouncyCastle.Asn1.Esf;
+using Org.BouncyCastle.Cms;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Pkcs;
 using System.Drawing;
-using System.Net.Sockets;
-using System.Runtime.ConstrainedExecution;
 using System.Security.Cryptography.X509Certificates;
 
 namespace EuroCertClient.Application.EuroCertSigner.Sign
@@ -44,23 +37,25 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       using var destFileStream = new FileStream(Path.GetTempFileName(), FileMode.Create);
       _logger.LogInformation($"Destination file created: {destFileStream.Name}");
 
-      var signer = new PdfSigner(
-          new PdfReader(srcFileStream).SetStrictnessLevel(PdfReader.StrictnessLevel.CONSERVATIVE),
-          destFileStream,
-          new StampingProperties().UseAppendMode());
-      _logger.LogInformation($"PdfSigner created. PDF Version {signer.GetDocument().GetPdfVersion()}");
-      
-      PrepareAppearance(signer, signData, request.SignImage);
+      var pdfReader = new PdfReader(srcFileStream);
+      var stamper = PdfStamper.CreateSignature(
+        pdfReader, destFileStream, '\0', null, true
+        );
+      _logger.LogInformation($"PdfSigner created. PDF Version {pdfReader.PdfVersion}");
+
+      PrepareAppearance(stamper.SignatureAppearance, signData, request.SignImage, pdfReader);
       _logger.LogInformation("Create signature stamper.");
 
       IExternalSignature externalSignature = GetExternalSignature(signData, _logger);
       _logger.LogInformation($"CreateExternalSignature {externalSignature}");
 
-      IX509Certificate[] chain = GetChain();
-      _logger.LogInformation($"Certificate loaded {chain.First().GetSubjectDN()}");
+      var chain = GetChain();
+      _logger.LogInformation($"Certificate loaded {chain.First().SubjectDN}");
 
-      signer.SignDetached(
-          externalSignature, chain, null, null, null, 0, PdfSigner.CryptoStandard.CADES);
+      MakeSignature.SignDetached(
+        stamper.SignatureAppearance,
+        externalSignature,
+        chain, null, null, null, 0, CryptoStandard.CADES);
       _logger.LogInformation("MakeSignature.SignDetached");
 
       return Task.FromResult(destFileStream.Name);
@@ -78,7 +73,7 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
           throw new ArgumentException("Private key not found in the PFX certificate.");
 
         ICipherParameters privateKey = pfxKeyStore.GetKey(alias).Key;
-        return new PrivateKeySignature(new PrivateKeyBC(privateKey), DigestAlgorithms.SHA256);
+        return new PrivateKeySignature(privateKey, DigestAlgorithms.SHA256);
       }
 
       if (CloudSignerName == "miPieczec")
@@ -87,19 +82,16 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
         return new EuroCertSignature(EuroCertAddress, signData.EuroCertApiKey, signData.EuroCertTaskId, logger);
     }
 
-    private IX509Certificate[] GetChain()
+    private Org.BouncyCastle.X509.X509Certificate[] GetChain()
     {
       X509Certificate2 cert = DebugMode_PKSigner
         ? new X509Certificate2(DebugMode_PKPath, DebugMode_PKPass)
         : new X509Certificate2(CertificateFilePath);
       
-      return new IX509Certificate[]
-      {
-        new X509CertificateBC(new Org.BouncyCastle.X509.X509Certificate(cert.RawData))
-      };
+      return [ new Org.BouncyCastle.X509.X509Certificate(cert.RawData) ];
     }
 
-    private void PrepareAppearance(PdfSigner signer, SignData signData, IFormFile? signImage)
+    private void PrepareAppearance(PdfSignatureAppearance appearance, SignData signData, IFormFile? signImage, PdfReader pdfReader)
     {
       if (signData.Appearance is null)
       {
@@ -111,42 +103,53 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
         throw new ArgumentException("SignImage is required.");
       }
 
-      var appearance = new SignatureFieldAppearance(signData.SignatureFieldName);
-      appearance.SetPageNumber(signData.Appearance.PageNumber);
-
       using var ms = new MemoryStream();
       signImage.CopyTo(ms);
-      appearance.SetContent(ImageDataFactory.Create(ms.ToArray()));
+      ms.Position = 0;
+      appearance.SignatureGraphic = iTextSharp.text.Image.GetInstance(ms);
+      appearance.SignatureRenderingMode = PdfSignatureAppearance.RenderingMode.GRAPHIC;
+      appearance.Layer2Text = "";
+      appearance.Reason = signData.Appearance.Reason;
+      appearance.Location = signData.Appearance.Location;
 
-      signer.SetSignatureAppearance(appearance);
-      signer.SetFieldName(signData.SignatureFieldName);
-      signer.SetPageNumber(signData.Appearance.PageNumber);
-      signer.SetReason(signData.Appearance.Reason);
-      signer.SetLocation(signData.Appearance.Location);
-
-      var rect = new iText.Kernel.Geom.Rectangle(
+      var rect = new RectangleF(
         signData.Appearance.X,
         signData.Appearance.Y,
         signData.Appearance.Width,
-        signData.Appearance.Height);
+        signData.Appearance.Height
+        );
 
-      var page = signer.GetDocument().GetPage(signData.Appearance.PageNumber);
-      if (page.GetRotation() == 270)
-        rect = new iText.Kernel.Geom.Rectangle(
-          rect.GetY(), 
-          page.GetPageSize().GetHeight() - rect.GetX() - rect.GetWidth(), 
-          rect.GetHeight(), 
-          rect.GetWidth()
-          );
-      if (page.GetRotation() == 90)
-        rect = new iText.Kernel.Geom.Rectangle(
-          page.GetPageSize().GetWidth() - rect.GetY() - rect.GetHeight(),
-          rect.GetX(),
-          rect.GetHeight(),
-          rect.GetWidth()
-          );
+      //var pageRotation = pdfReader.GetPageRotation(signData.Appearance.PageNumber);
+      //var pageSize = pdfReader.GetPageSize(signData.Appearance.PageNumber);
+      //if (pageRotation == 270)
+      //{
+      //  rect = new RectangleF(
+      //    rect.Y,
+      //    pageSize.Height - rect.X - rect.Width,
+      //    rect.Height,
+      //    rect.Width
+      //    );
+      //}
+      //else if (pageRotation == 90)
+      //{
+      //  rect = new RectangleF(
+      //    pageSize.Width - rect.Y - rect.Height,
+      //    rect.X,
+      //    rect.Height,
+      //    rect.Width
+      //    );
+      //}
+      
+      appearance.SetVisibleSignature(
+        RectangleFToRectangle(rect),
+        signData.Appearance.PageNumber,
+        signData.SignatureFieldName
+        );
+    }
 
-      signer.SetPageRect(rect);
+    private iTextSharp.text.Rectangle RectangleFToRectangle(RectangleF rect)
+    {
+      return new iTextSharp.text.Rectangle(rect.X, rect.Y, rect.X + rect.Width, rect.Y + rect.Height);
     }
 
     private string CertificateFilePath

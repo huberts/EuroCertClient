@@ -32,7 +32,7 @@ namespace EuroCertClient.Application.EuroCertSigner.Sign
       return temporaryFileName;
     }
 
-    public iText.Kernel.Geom.Rectangle BuildBBOX(Appearance appearance)
+    public iTextSharp.text.Rectangle BuildBBOX(Appearance appearance)
     {
       float ratio = (float)Height / (float)Width;
       if (appearance.Width * ratio < appearance.Height)
