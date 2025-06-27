@@ -1,4 +1,5 @@
 using EuroCertClient.Application.EuroCertSigner.Sign;
+using Microsoft.AspNetCore.Http.Features;
 using NLog.Web;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -13,7 +14,12 @@ builder.Services.AddSwaggerGen();
 
 builder.WebHost.ConfigureKestrel(options =>
 {
-  options.Limits.MaxRequestBodySize = long.MaxValue;
+  options.Limits.MaxRequestBodySize = 1073741824; // 1 GB
+});
+
+builder.Services.Configure<FormOptions>(options =>
+{
+  options.MultipartBodyLengthLimit = 1073741824; // 1 GB
 });
 
 builder.Logging.ClearProviders();
